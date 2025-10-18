@@ -29,16 +29,25 @@ function Health() {
   );
 }
 
+type Recipe = { id: string; title: string; createdAt?: string; updatedAt?: string };
+
 function Recipes() {
-  const [recipes, setRecipes] = React.useState<any[]>([]);
+  const [recipes, setRecipes] = React.useState<Recipe[]>([]);
   const [title, setTitle] = React.useState('');
-  const [loading, setLoading] = React.useState(false);
+  const [creating, setCreating] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+
+  // Inline edit state (per item)
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [editTitle, setEditTitle] = React.useState<string>('');
+  const [savingId, setSavingId] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   async function load() {
     setError(null);
     try {
       const res = await fetch('/api/recipes');
+      if (!res.ok) throw new Error(`Failed to load (${res.status})`);
       const data = await res.json();
       setRecipes(data);
     } catch (e: any) {
@@ -51,7 +60,7 @@ function Recipes() {
   async function create(e: React.FormEvent) {
     e.preventDefault();
     if (!title.trim()) return;
-    setLoading(true);
+    setCreating(true);
     setError(null);
     try {
       const res = await fetch('/api/recipes', {
@@ -65,7 +74,55 @@ function Recipes() {
     } catch (e: any) {
       setError(e?.message || String(e));
     } finally {
-      setLoading(false);
+      setCreating(false);
+    }
+  }
+
+  function startEdit(r: Recipe) {
+    setEditingId(r.id);
+    setEditTitle(r.title);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditTitle('');
+  }
+
+  async function saveEdit(id: string) {
+    if (!editTitle.trim()) return;
+    setSavingId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/recipes/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: editTitle.trim() }),
+      });
+      if (!res.ok) throw new Error(`Failed to save (${res.status})`);
+      setEditingId(null);
+      setEditTitle('');
+      await load();
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm('Delete this recipe?')) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/recipes/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) throw new Error(`Failed to delete (${res.status})`);
+      await load();
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -82,25 +139,75 @@ function Recipes() {
         />
         <button
           className="border rounded px-4 py-2"
-          disabled={loading || !title.trim()}
+          disabled={creating || !title.trim()}
         >
-          {loading ? 'Creating…' : 'Create'}
+          {creating ? 'Creating…' : 'Create'}
         </button>
       </form>
 
       {error && <div className="text-red-600">{error}</div>}
 
       <ul className="space-y-2">
-        {recipes.map((r) => (
-          <li key={r.id} className="border rounded px-3 py-2 flex items-center justify-between">
-            <div>
-              <div className="font-medium">{r.title}</div>
-              <div className="text-xs text-gray-500">id: {r.id}</div>
-            </div>
-            {/* We’ll add edit/delete next step */}
-          </li>
-        ))}
+        {recipes.map((r) => {
+          const isEditing = editingId === r.id;
+          const isSaving = savingId === r.id;
+          const isDeleting = deletingId === r.id;
+
+          return (
+            <li key={r.id} className="border rounded px-3 py-2">
+              {!isEditing ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="font-medium">{r.title}</div>
+                    <div className="text-xs text-gray-500">id: {r.id}</div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="border rounded px-3 py-1"
+                      onClick={() => startEdit(r)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="border rounded px-3 py-1 text-red-600"
+                      onClick={() => remove(r.id)}
+                      disabled={isDeleting}
+                    >
+                      {isDeleting ? 'Deleting…' : 'Delete'}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <input
+                    className="border rounded px-3 py-2 flex-1"
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    autoFocus
+                  />
+                  <button
+                    className="border rounded px-3 py-2"
+                    onClick={() => saveEdit(r.id)}
+                    disabled={isSaving || !editTitle.trim()}
+                  >
+                    {isSaving ? 'Saving…' : 'Save'}
+                  </button>
+                  <button
+                    className="border rounded px-3 py-2"
+                    onClick={cancelEdit}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
+
+      {recipes.length === 0 && (
+        <div className="text-gray-600">No recipes yet. Create your first one above.</div>
+      )}
     </div>
   );
 }
