@@ -7,6 +7,18 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model User {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  email       String   @unique
+  displayName String
+  passwordHash String
+
+  recipes     Recipe[]
+}
+
 model Recipe {
   id          String   @id @default(cuid())
   createdAt   DateTime @default(now())
@@ -26,8 +38,9 @@ model Recipe {
   imagePath   String?
   sourceUrl   String?
 
-  // NEW: Ownership & visibility
+  // Ownership & visibility
   ownerId     String?
+  owner       User?     @relation(fields: [ownerId], references: [id])
   ownerName   String?
-  isPublic    Boolean  @default(true)
+  isPublic    Boolean   @default(true)
 }

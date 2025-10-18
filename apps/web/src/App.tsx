@@ -1,8 +1,9 @@
-import { Outlet, NavLink } from 'react-router-dom';
-import { getViewer } from './lib/auth';
+import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useAuth } from './auth/AuthProvider';
 
 export default function App() {
-  const v = getViewer();
+  const nav = useNavigate();
+  const { user, logout } = useAuth();
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -17,12 +18,24 @@ export default function App() {
               <NavLink to="/recipes" className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`}>
                 Recipes
               </NavLink>
-              <NavLink to="/account" className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`}>
-                Account
-              </NavLink>
             </nav>
           </div>
-          <div className="text-sm text-gray-600">Signed in as <span className="font-medium">{v.name}</span></div>
+
+          <div className="flex items-center gap-3 text-sm">
+            {user ? (
+              <>
+                <span className="text-gray-700">Hello, <span className="font-medium">{user.displayName}</span></span>
+                <button className="text-red-600 hover:underline" onClick={async()=>{ await logout(); nav('/'); }}>
+                  Logout
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="hover:underline" onClick={()=>nav('/login')}>Login</button>
+                <button className="hover:underline" onClick={()=>nav('/register')}>Register</button>
+              </>
+            )}
+          </div>
         </div>
       </header>
 

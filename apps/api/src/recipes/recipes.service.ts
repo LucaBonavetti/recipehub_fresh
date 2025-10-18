@@ -11,7 +11,7 @@ type ListParams = {
   order?: 'recent' | 'title';
   limit?: number;
   offset?: number;
-  viewerId?: string | null; // NEW
+  viewerId?: string | null;
 };
 
 function isLocalUpload(p?: string | null): p is string {
@@ -30,12 +30,11 @@ export class RecipesService {
   async list(params: ListParams = {}) {
     const { q, tags, order = 'recent', limit = 100, offset = 0, viewerId = null } = params;
 
-    // Pull all, then filter (SQLite + JSON filters)
     const rows = await this.prisma.recipe.findMany({
       orderBy: order === 'title' ? { title: 'asc' } : { createdAt: 'desc' },
     });
 
-    // Visibility: public OR owned by viewer
+    // public OR owned by viewer
     let filtered = rows.filter((r) => r.isPublic || (viewerId && r.ownerId === viewerId));
 
     if (q && q.trim()) {
@@ -71,7 +70,7 @@ export class RecipesService {
     return rec;
   }
 
-  create(dto: CreateRecipeDto, ownerId: string | null, ownerName: string | null) {
+  create(dto: CreateRecipeDto, ownerId: string, ownerName: string) {
     return this.prisma.recipe.create({
       data: {
         title: dto.title,
@@ -85,16 +84,16 @@ export class RecipesService {
         imagePath: dto.imagePath ?? null,
         sourceUrl: dto.sourceUrl ?? null,
         isPublic: dto.isPublic ?? true,
-        ownerId: ownerId ?? null,
-        ownerName: ownerName ?? null,
+        ownerId,
+        ownerName,
       },
     });
   }
 
-  async update(id: string, dto: UpdateRecipeDto, viewerId: string | null) {
+  async update(id: string, dto: UpdateRecipeDto, viewerId: string) {
     const before = await this.prisma.recipe.findUnique({ where: { id } });
     if (!before) throw new NotFoundException('Recipe not found');
-    if (!viewerId || before.ownerId !== viewerId) throw new ForbiddenException('Not your recipe');
+    if (before.ownerId !== viewerId) throw new ForbiddenException('Not your recipe');
 
     const updated = await this.prisma.recipe.update({
       where: { id },
@@ -119,10 +118,10 @@ export class RecipesService {
     return updated;
   }
 
-  async remove(id: string, viewerId: string | null) {
+  async remove(id: string, viewerId: string) {
     const rec = await this.prisma.recipe.findUnique({ where: { id } });
     if (!rec) throw new NotFoundException('Recipe not found');
-    if (!viewerId || rec.ownerId !== viewerId) throw new ForbiddenException('Not your recipe');
+    if (rec.ownerId !== viewerId) throw new ForbiddenException('Not your recipe');
 
     await this.prisma.recipe.delete({ where: { id } });
     await deleteLocalFile(rec.imagePath);

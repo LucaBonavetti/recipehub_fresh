@@ -1,10 +1,14 @@
 import React from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiFetch } from '../api';
-import { getViewer } from '../lib/auth';
+import { useAuth } from '../auth/AuthProvider';
 
-// ... (helpers left as they were in your last working file) ...
-// For brevity I keep the helper implementations identical; only the data fetch & header matters.
+// quantity helpers (same as before)
+function trimZeros(n: number, maxDecimals = 2) { const s = n.toFixed(maxDecimals); return s.replace(/\.?0+$/, ''); }
+function parseLeadingQuantity(text: string){const s=text.trimStart();const p=text.length-s.length;let m=s.match(/^(\d+)\s+(\d+)\/(\d+)(\b|[^0-9/])/);if(m){const w=+m[1],a=+m[2],b=+m[3];if(b)return{value:w+a/b,length:p+m[0].length-m[4].length};}m=s.match(/^(\d+)\/(\d+)(\b|[^0-9/])/);if(m){const a=+m[1],b=+m[2];if(b)return{value:a/b,length:p+m[0].length-m[3].length};}m=s.match(/^(\d+(?:\.\d+)?)(\b|[^0-9.])/);if(m){const v=parseFloat(m[1]);if(!Number.isNaN(v))return{value:v,length:p+m[0].length-m[2].length};}m=s.match(/^(\d+(?:\.\d+)?)$/);if(m){const v=parseFloat(m[1]);if(!Number.isNaN(v))return{value:v,length:p+m[0].length};}return null;}
+function parseLeadingRange(text: string){const s=text.trimStart();const p=text.length-s.length;const m=s.match(/^(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)\s*[-–]\s*(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)(\b|[^0-9/.\s])?/);if(!m)return null;const toN=(t:string)=>{const mx=t.match(/^(\d+)\s+(\d+)\/(\d+)$/);if(mx)return +mx[1]+(+mx[3]?+mx[2]/+mx[3]:0);const fx=t.match(/^(\d+)\/(\d+)$/);if(fx)return +fx[1]/+fx[2];return parseFloat(t)};const a=toN(m[1]),b=toN(m[2]);if([a,b].some(Number.isNaN))return null;return{a,b,length:p+m[0].length-(m[3]?.length??0)};}
+function scaleIngredientLine(line:string,factor:number){const t=line.trim();if(!t)return line;const r=parseLeadingRange(t);if(r){const rest=t.slice(r.length).trimStart();return `${trimZeros(r.a*factor)}–${trimZeros(r.b*factor)} ${rest}`.trim();}const q=parseLeadingQuantity(t);if(q){const rest=t.slice(q.length).trimStart();return `${trimZeros(q.value*factor)} ${rest}`.trim();}return line;}
+function scaleIngredients(lines?:string[],factor?:number){if(!Array.isArray(lines)||!factor||factor===1)return lines??[];return lines.map(l=>scaleIngredientLine(l,factor));}
 
 type Recipe = {
   id: string;
@@ -23,16 +27,8 @@ type Recipe = {
   ownerName?: string | null;
 };
 
-// (Paste your existing quantity-scaling helpers here unchanged)
-
-function trimZeros(n: number, maxDecimals = 2) { const s = n.toFixed(maxDecimals); return s.replace(/\.?0+$/, ''); }
-function parseLeadingQuantity(text: string){const s=text.trimStart();const p=text.length-s.length;let m=s.match(/^(\d+)\s+(\d+)\/(\d+)(\b|[^0-9/])/);if(m){const w=+m[1],a=+m[2],b=+m[3];if(b)return{value:w+a/b,length:p+m[0].length-m[4].length};}m=s.match(/^(\d+)\/(\d+)(\b|[^0-9/])/);if(m){const a=+m[1],b=+m[2];if(b)return{value:a/b,length:p+m[0].length-m[3].length};}m=s.match(/^(\d+(?:\.\d+)?)(\b|[^0-9.])/);if(m){const v=parseFloat(m[1]);if(!Number.isNaN(v))return{value:v,length:p+m[0].length-m[2].length};}m=s.match(/^(\d+(?:\.\d+)?)$/);if(m){const v=parseFloat(m[1]);if(!Number.isNaN(v))return{value:v,length:p+m[0].length};}return null;}
-function parseLeadingRange(text: string){const s=text.trimStart();const p=text.length-s.length;const m=s.match(/^(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)\s*[-–]\s*(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)(\b|[^0-9/.\s])?/);if(!m)return null;const toN=(t:string)=>{const mx=t.match(/^(\d+)\s+(\d+)\/(\d+)$/);if(mx)return +mx[1]+(+mx[3]?+mx[2]/+mx[3]:0);const fx=t.match(/^(\d+)\/(\d+)$/);if(fx)return +fx[2]?+fx[1]/+fx[2]:0;return parseFloat(t)};const a=toN(m[1]),b=toN(m[2]);if([a,b].some(Number.isNaN))return null;return{a,b,length:p+m[0].length-(m[3]?.length??0)};}
-function scaleIngredientLine(line:string,factor:number){const t=line.trim();if(!t)return line;const r=parseLeadingRange(t);if(r){const rest=t.slice(r.length).trimStart();return `${trimZeros(r.a*factor)}–${trimZeros(r.b*factor)} ${rest}`.trim();}const q=parseLeadingQuantity(t);if(q){const rest=t.slice(q.length).trimStart();return `${trimZeros(q.value*factor)} ${rest}`.trim();}return line;}
-function scaleIngredients(lines?:string[],factor?:number){if(!Array.isArray(lines)||!factor||factor===1)return lines??[];return lines.map(l=>scaleIngredientLine(l,factor));}
-
 export default function RecipeDetails() {
-  const viewer = getViewer();
+  const { user } = useAuth();
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [r, setR] = React.useState<Recipe | null>(null);
@@ -48,7 +44,9 @@ export default function RecipeDetails() {
         const data: Recipe = await res.json();
         setR(data);
         setTargetServings(data.servings ?? 1);
-      } catch (e: any) { setError(e?.message || String(e)); }
+      } catch (e: any) {
+        setError(e?.message || String(e));
+      }
     })();
   }, [id]);
 
@@ -60,13 +58,17 @@ export default function RecipeDetails() {
       const res = await apiFetch(`/api/recipes/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`Failed to delete (${res.status})`);
       navigate('/recipes');
-    } catch (e: any) { setError(e?.message || String(e)); } finally { setDeleting(false); }
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setDeleting(false);
+    }
   }
 
   if (error) return <div className="text-red-600">{error}</div>;
   if (!r) return <div>Loading…</div>;
 
-  const isOwner = r.ownerId && r.ownerId === viewer.id;
+  const isOwner = user && r.ownerId === user.id;
 
   const baseServings = r.servings ?? 1;
   const curServings = targetServings ?? baseServings;
@@ -105,7 +107,6 @@ export default function RecipeDetails() {
 
       {r.description && <p className="text-gray-700 whitespace-pre-line">{r.description}</p>}
 
-      {/* (keep the servings scaler + ingredients/steps blocks exactly as earlier) */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="font-medium">Servings:</div>
         <div className="flex items-center gap-2">

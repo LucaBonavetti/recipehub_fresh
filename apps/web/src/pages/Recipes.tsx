@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { apiFetch } from '../api';
-import { getViewer } from '../lib/auth';
+import { useAuth } from '../auth/AuthProvider';
 
 type Recipe = {
   id: string;
@@ -17,13 +17,12 @@ type Recipe = {
 type ApiList<T> = { total: number; items: T[] };
 
 export default function Recipes() {
-  const viewer = getViewer();
+  const { user } = useAuth();
   const [recipes, setRecipes] = React.useState<Recipe[]>([]);
   const [total, setTotal] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
   const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
-  // Filters
   const [q, setQ] = React.useState('');
   const [order, setOrder] = React.useState<'recent' | 'title'>('recent');
   const [selectedTags, setSelectedTags] = React.useState<string[]>([]);
@@ -32,9 +31,7 @@ export default function Recipes() {
 
   const allTags = React.useMemo(() => {
     const set = new Set<string>();
-    for (const r of recipes) {
-      r.tags?.forEach((t) => set.add(t));
-    }
+    for (const r of recipes) r.tags?.forEach((t) => set.add(t));
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [recipes]);
 
@@ -120,7 +117,7 @@ export default function Recipes() {
 
       <ul className="space-y-2">
         {recipes.map((r) => {
-          const isOwner = r.ownerId && r.ownerId === viewer.id;
+          const isOwner = user && r.ownerId === user.id;
           return (
             <li key={r.id} className="border rounded p-3 flex items-center gap-4">
               <div className="w-16 h-16 border rounded overflow-hidden bg-gray-50 flex-shrink-0">
