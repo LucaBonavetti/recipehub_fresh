@@ -8,6 +8,7 @@ export default function App() {
           <Link to="/" className="text-lg font-semibold">RecipeHub</Link>
           <nav className="flex gap-4 text-sm">
             <NavLink to="/" end className={({isActive}) => isActive ? 'font-semibold' : ''}>Home</NavLink>
+            <NavLink to="/recipes" className={({isActive}) => isActive ? 'font-semibold' : ''}>Recipes</NavLink>
             <NavLink to="/health" className={({isActive}) => isActive ? 'font-semibold' : ''}>Health</NavLink>
           </nav>
         </div>
