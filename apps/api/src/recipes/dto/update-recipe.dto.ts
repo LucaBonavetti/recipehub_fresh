@@ -1,4 +1,4 @@
-import { IsArray, IsInt, IsOptional, IsString, Min, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsInt, IsOptional, IsString, IsUrl, Min, MinLength } from 'class-validator';
 
 export class UpdateRecipeDto {
   @IsOptional()
@@ -43,4 +43,13 @@ export class UpdateRecipeDto {
   @IsOptional()
   @IsString()
   imagePath?: string | null;
+
+  @IsOptional()
+  @IsUrl({ require_protocol: true }, { message: 'sourceUrl must be a valid http(s) URL' })
+  sourceUrl?: string | null;
+
+  // NEW
+  @IsOptional()
+  @IsBoolean()
+  isPublic?: boolean;
 }

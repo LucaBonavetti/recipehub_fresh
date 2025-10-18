@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { apiFetch } from '../api';
 
+// (types same as before plus isPublic/owner)
 type Recipe = {
   id: string;
   title: string;
@@ -12,20 +14,14 @@ type Recipe = {
   prepMinutes?: number | null;
   cookMinutes?: number | null;
   imagePath?: string | null;
+  sourceUrl?: string | null;
+  isPublic?: boolean;
 };
 
-function parseLines(text: string): string[] {
-  return text.split('\n').map((s) => s.trim()).filter(Boolean);
-}
-function joinLines(arr?: string[]) {
-  return (arr ?? []).join('\n');
-}
-function parseTags(text: string): string[] {
-  return text.split(',').map((s) => s.trim()).filter(Boolean);
-}
-function joinTags(arr?: string[]) {
-  return (arr ?? []).join(', ');
-}
+function parseLines(text: string): string[] { return text.split('\n').map((s) => s.trim()).filter(Boolean); }
+function joinLines(arr?: string[]) { return (arr ?? []).join('\n'); }
+function parseTags(text: string): string[] { return text.split(',').map((s) => s.trim()).filter(Boolean); }
+function joinTags(arr?: string[]) { return (arr ?? []).join(', '); }
 
 export default function RecipeForm() {
   const { id } = useParams<{ id?: string }>();
@@ -35,7 +31,6 @@ export default function RecipeForm() {
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // form fields
   const [title, setTitle] = React.useState('');
   const [description, setDescription] = React.useState('');
   const [ingredients, setIngredients] = React.useState('');
@@ -45,16 +40,18 @@ export default function RecipeForm() {
   const [prepMinutes, setPrepMinutes] = React.useState<number | ''>('');
   const [cookMinutes, setCookMinutes] = React.useState<number | ''>('');
   const [imagePath, setImagePath] = React.useState<string | null>(null);
+  const [sourceUrl, setSourceUrl] = React.useState<string>('');
+  const [isPublic, setIsPublic] = React.useState<boolean>(true);
+
   const [uploading, setUploading] = React.useState(false);
   const [uploadErr, setUploadErr] = React.useState<string | null>(null);
 
-  // load existing when editing
   React.useEffect(() => {
     if (!isEdit) return;
     (async () => {
       setError(null);
       try {
-        const res = await fetch(`/api/recipes/${id}`);
+        const res = await apiFetch(`/api/recipes/${id}`);
         if (!res.ok) throw new Error(`Failed to load (${res.status})`);
         const r: Recipe = await res.json();
         setTitle(r.title);
@@ -66,9 +63,9 @@ export default function RecipeForm() {
         setPrepMinutes(r.prepMinutes ?? '');
         setCookMinutes(r.cookMinutes ?? '');
         setImagePath(r.imagePath ?? null);
-      } catch (e: any) {
-        setError(e?.message || String(e));
-      }
+        setSourceUrl(r.sourceUrl ?? '');
+        setIsPublic(r.isPublic ?? true);
+      } catch (e: any) { setError(e?.message || String(e)); }
     })();
   }, [id, isEdit]);
 
@@ -87,12 +84,14 @@ export default function RecipeForm() {
         prepMinutes: prepMinutes === '' ? null : Number(prepMinutes),
         cookMinutes: cookMinutes === '' ? null : Number(cookMinutes),
         imagePath: imagePath ?? null,
+        sourceUrl: sourceUrl.trim() || null,
+        isPublic,
       };
 
       const url = isEdit ? `/api/recipes/${id}` : `/api/recipes`;
       const method = isEdit ? 'PATCH' : 'POST';
 
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -100,43 +99,26 @@ export default function RecipeForm() {
       if (!res.ok) throw new Error(`Failed to ${isEdit ? 'save' : 'create'} (${res.status})`);
       const saved: Recipe = await res.json();
       navigate(`/recipes/${saved.id}`);
-    } catch (e: any) {
-      setError(e?.message || String(e));
-    } finally {
-      setLoading(false);
-    }
+    } catch (e: any) { setError(e?.message || String(e)); } finally { setLoading(false); }
   }
 
   async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
     if (!f) return;
     setUploadErr(null);
-    if (f.size > 2 * 1024 * 1024) { // 2 MiB
-      setUploadErr('Image too large (max 2 MB).');
-      e.target.value = '';
-      return;
-    }
+    if (f.size > 2 * 1024 * 1024) { setUploadErr('Image too large (max 2 MB).'); e.target.value = ''; return; }
     setUploading(true);
     try {
       const fd = new FormData();
       fd.append('file', f);
-      const res = await fetch('/api/uploads', { method: 'POST', body: fd });
+      const res = await apiFetch('/api/uploads', { method: 'POST', body: fd });
       const data = await res.json();
-      if (!res.ok || !data?.path) {
-        throw new Error(data?.message || `Upload failed (${res.status})`);
-      }
+      if (!res.ok || !data?.path) throw new Error(data?.message || `Upload failed (${res.status})`);
       setImagePath(data.path);
-    } catch (err: any) {
-      setUploadErr(err?.message || String(err));
-    } finally {
-      setUploading(false);
-      e.target.value = '';
-    }
+    } catch (err: any) { setUploadErr(err?.message || String(err)); } finally { setUploading(false); e.target.value = ''; }
   }
 
-  function clearImage() {
-    setImagePath(null);
-  }
+  function clearImage() { setImagePath(null); }
 
   return (
     <div className="space-y-6 max-w-3xl">
@@ -155,25 +137,23 @@ export default function RecipeForm() {
           <textarea className="border rounded px-3 py-2 w-full min-h-24" value={description} onChange={(e) => setDescription(e.target.value)} />
         </div>
 
-        {/* Image */}
         <div className="space-y-2">
           <label className="block text-sm">Image (max 2 MB)</label>
           {imagePath ? (
             <div className="flex items-center gap-3">
-              <img
-                src={imagePath}
-                alt="Recipe"
-                className="w-32 h-32 object-cover rounded border"
-              />
-              <button type="button" className="border rounded px-3 py-2" onClick={clearImage}>
-                Remove
-              </button>
+              <img src={imagePath} alt="Recipe" className="w-32 h-32 object-cover rounded border"
+                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }} />
+              <button type="button" className="border rounded px-3 py-2" onClick={clearImage}>Remove</button>
             </div>
-          ) : (
-            <input type="file" accept="image/*" onChange={onPickFile} disabled={uploading} />
-          )}
+          ) : <input type="file" accept="image/*" onChange={onPickFile} disabled={uploading} />}
           {uploading && <div className="text-sm text-gray-600">Uploading…</div>}
           {uploadErr && <div className="text-sm text-red-600">{uploadErr}</div>}
+        </div>
+
+        <div>
+          <label className="block text-sm mb-1">Source URL</label>
+          <input className="border rounded px-3 py-2 w-full" placeholder="https://example.com/my-recipe"
+                 value={sourceUrl} onChange={(e) => setSourceUrl(e.target.value)} />
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">
@@ -195,17 +175,26 @@ export default function RecipeForm() {
         <div className="grid md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm mb-1">Servings</label>
-            <input type="number" min={1} className="border rounded px-3 py-2 w-full" value={servings} onChange={(e) => setServings(e.target.value === '' ? '' : Number(e.target.value))} />
+            <input type="number" min={1} className="border rounded px-3 py-2 w-full"
+                   value={servings} onChange={(e) => setServings(e.target.value === '' ? '' : Number(e.target.value))} />
           </div>
           <div>
             <label className="block text-sm mb-1">Prep (min)</label>
-            <input type="number" min={0} className="border rounded px-3 py-2 w-full" value={prepMinutes} onChange={(e) => setPrepMinutes(e.target.value === '' ? '' : Number(e.target.value))} />
+            <input type="number" min={0} className="border rounded px-3 py-2 w-full"
+                   value={prepMinutes} onChange={(e) => setPrepMinutes(e.target.value === '' ? '' : Number(e.target.value))} />
           </div>
           <div>
             <label className="block text-sm mb-1">Cook (min)</label>
-            <input type="number" min={0} className="border rounded px-3 py-2 w-full" value={cookMinutes} onChange={(e) => setCookMinutes(e.target.value === '' ? '' : Number(e.target.value))} />
+            <input type="number" min={0} className="border rounded px-3 py-2 w-full"
+                   value={cookMinutes} onChange={(e) => setCookMinutes(e.target.value === '' ? '' : Number(e.target.value))} />
           </div>
         </div>
+
+        {/* NEW: Visibility */}
+        <label className="inline-flex items-center gap-2">
+          <input type="checkbox" checked={isPublic} onChange={(e) => setIsPublic(e.target.checked)} />
+          <span>Public</span>
+        </label>
 
         <div className="flex gap-2">
           <button className="border rounded px-4 py-2" disabled={loading || !title.trim()}>

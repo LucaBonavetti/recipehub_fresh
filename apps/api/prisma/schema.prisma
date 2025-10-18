@@ -3,7 +3,6 @@ generator client {
 }
 
 datasource db {
-  // Still using SQLite for zero-friction dev
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
@@ -16,15 +15,19 @@ model Recipe {
   title       String
   description String?
 
-  // store arrays as JSON for simplicity
-  ingredients Json     // string[]
-  steps       Json     // string[]
-  tags        Json     // string[]
+  ingredients Json      // string[]
+  steps       Json      // string[]
+  tags        Json      // string[]
 
   servings    Int?
   prepMinutes Int?
   cookMinutes Int?
 
-  // single image stored locally and served at /uploads/<filename>
   imagePath   String?
+  sourceUrl   String?
+
+  // NEW: Ownership & visibility
+  ownerId     String?
+  ownerName   String?
+  isPublic    Boolean  @default(true)
 }
