@@ -3,14 +3,67 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 
+type ListParams = {
+  q?: string;
+  tags?: string[];
+  order?: 'recent' | 'title';
+  limit?: number;
+  offset?: number;
+};
+
 @Injectable()
 export class RecipesService {
   constructor(private prisma: PrismaService) {}
 
-  list() {
-    return this.prisma.recipe.findMany({
-      orderBy: { createdAt: 'desc' },
+  /**
+   * List recipes with optional search, tag filtering, sorting, and pagination.
+   * Note: To keep this SQLite-friendly, we do case-insensitive search and tag
+   * filtering in memory (OK for dev/small datasets).
+   */
+  async list(params: ListParams = {}) {
+    const {
+      q,
+      tags,
+      order = 'recent',
+      limit = 100,
+      offset = 0,
+    } = params;
+
+    // Order in DB for efficiency; filter in memory for SQLite compatibility
+    const rows = await this.prisma.recipe.findMany({
+      orderBy: order === 'title' ? { title: 'asc' } : { createdAt: 'desc' },
     });
+
+    let filtered = rows;
+
+    // Case-insensitive search on title/description (in memory)
+    if (q && q.trim()) {
+      const needle = q.trim().toLowerCase();
+      filtered = filtered.filter((r) => {
+        const title = (r.title ?? '').toLowerCase();
+        const desc = ((r as any).description ?? '').toLowerCase();
+        return title.includes(needle) || desc.includes(needle);
+      });
+    }
+
+    // Tag filter (AND logic) in memory; tags stored as JSON string[]
+    if (tags && tags.length) {
+      filtered = filtered.filter((r) => {
+        const arr: string[] = Array.isArray((r as any).tags) ? (r as any).tags : [];
+        const lower = arr.map((x) => x.toLowerCase());
+        return tags.every((t) => lower.includes(t.toLowerCase()));
+      });
+    }
+
+    // Paginate in memory
+    const start = Math.max(0, Number(offset) || 0);
+    const end = start + (Math.max(1, Math.min(500, Number(limit) || 100)));
+    const page = filtered.slice(start, end);
+
+    return {
+      total: filtered.length,
+      items: page,
+    };
   }
 
   async get(id: string) {

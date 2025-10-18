@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Patch, Post, Query } from '@nestjs/common';
 import { RecipesService } from './recipes.service';
 import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
@@ -8,8 +8,21 @@ export class RecipesController {
   constructor(private svc: RecipesService) {}
 
   @Get()
-  list() {
-    return this.svc.list();
+  list(
+    @Query('q') q?: string,
+    @Query('tags') tagsStr?: string,         // comma-separated: "vegan,gluten-free"
+    @Query('order') order?: 'recent' | 'title',
+    @Query('limit') limitStr?: string,
+    @Query('offset') offsetStr?: string,
+  ) {
+    const tags = tagsStr
+      ? tagsStr.split(',').map((s) => s.trim()).filter(Boolean)
+      : undefined;
+
+    const limit = limitStr ? Number(limitStr) : undefined;
+    const offset = offsetStr ? Number(offsetStr) : undefined;
+
+    return this.svc.list({ q, tags, order, limit, offset });
   }
 
   @Get(':id')
