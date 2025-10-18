@@ -21,7 +21,16 @@ export class RecipesService {
 
   create(dto: CreateRecipeDto) {
     return this.prisma.recipe.create({
-      data: { title: dto.title },
+      data: {
+        title: dto.title,
+        description: dto.description ?? null,
+        ingredients: dto.ingredients ?? [],
+        steps: dto.steps ?? [],
+        tags: (dto.tags ?? []).map((t) => t.trim()).filter(Boolean),
+        servings: dto.servings ?? null,
+        prepMinutes: dto.prepMinutes ?? null,
+        cookMinutes: dto.cookMinutes ?? null,
+      },
     });
   }
 
@@ -29,7 +38,16 @@ export class RecipesService {
     await this.get(id); // throws if missing
     return this.prisma.recipe.update({
       where: { id },
-      data: { ...dto },
+      data: {
+        title: dto.title ?? undefined,
+        description: dto.description ?? undefined,
+        ingredients: dto.ingredients ?? undefined,
+        steps: dto.steps ?? undefined,
+        tags: dto.tags ? dto.tags.map((t) => t.trim()).filter(Boolean) : undefined,
+        servings: dto.servings ?? undefined,
+        prepMinutes: dto.prepMinutes ?? undefined,
+        cookMinutes: dto.cookMinutes ?? undefined,
+      },
     });
   }
 

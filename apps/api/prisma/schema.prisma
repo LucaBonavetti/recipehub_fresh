@@ -3,13 +3,25 @@ generator client {
 }
 
 datasource db {
+  // Still using SQLite for zero-friction dev
   provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
 model Recipe {
-  id        String   @id @default(cuid())
-  title     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  title       String
+  description String?
+
+  // store arrays as JSON for simplicity
+  ingredients Json     // string[]
+  steps       Json     // string[]
+  tags        Json     // string[]
+
+  servings    Int?
+  prepMinutes Int?
+  cookMinutes Int?
 }
