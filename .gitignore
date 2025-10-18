@@ -1,0 +1,17 @@
+# general
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+
+# node
+node_modules
+pnpm-lock.yaml
+
+# build
+dist
+build
+
+# env
+.env
+apps/*/.env

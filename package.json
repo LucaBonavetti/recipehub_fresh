@@ -1,0 +1,16 @@
+{
+  "name": "recipehub-monorepo",
+  "private": true,
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n web,api -c cyan,magenta \"pnpm -C apps/web dev\" \"pnpm -C apps/api start:dev\"",
+    "build": "pnpm -C apps/api build && pnpm -C apps/web build",
+    "start": "pnpm -C apps/api start:prod"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}
