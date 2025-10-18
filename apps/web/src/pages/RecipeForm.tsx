@@ -11,22 +11,17 @@ type Recipe = {
   servings?: number | null;
   prepMinutes?: number | null;
   cookMinutes?: number | null;
+  imagePath?: string | null;
 };
 
 function parseLines(text: string): string[] {
-  return text
-    .split('\n')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return text.split('\n').map((s) => s.trim()).filter(Boolean);
 }
 function joinLines(arr?: string[]) {
   return (arr ?? []).join('\n');
 }
 function parseTags(text: string): string[] {
-  return text
-    .split(',')
-    .map((s) => s.trim())
-    .filter(Boolean);
+  return text.split(',').map((s) => s.trim()).filter(Boolean);
 }
 function joinTags(arr?: string[]) {
   return (arr ?? []).join(', ');
@@ -49,6 +44,9 @@ export default function RecipeForm() {
   const [servings, setServings] = React.useState<number | ''>('');
   const [prepMinutes, setPrepMinutes] = React.useState<number | ''>('');
   const [cookMinutes, setCookMinutes] = React.useState<number | ''>('');
+  const [imagePath, setImagePath] = React.useState<string | null>(null);
+  const [uploading, setUploading] = React.useState(false);
+  const [uploadErr, setUploadErr] = React.useState<string | null>(null);
 
   // load existing when editing
   React.useEffect(() => {
@@ -67,6 +65,7 @@ export default function RecipeForm() {
         setServings(r.servings ?? '');
         setPrepMinutes(r.prepMinutes ?? '');
         setCookMinutes(r.cookMinutes ?? '');
+        setImagePath(r.imagePath ?? null);
       } catch (e: any) {
         setError(e?.message || String(e));
       }
@@ -87,6 +86,7 @@ export default function RecipeForm() {
         servings: servings === '' ? null : Number(servings),
         prepMinutes: prepMinutes === '' ? null : Number(prepMinutes),
         cookMinutes: cookMinutes === '' ? null : Number(cookMinutes),
+        imagePath: imagePath ?? null,
       };
 
       const url = isEdit ? `/api/recipes/${id}` : `/api/recipes`;
@@ -107,6 +107,37 @@ export default function RecipeForm() {
     }
   }
 
+  async function onPickFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    setUploadErr(null);
+    if (f.size > 2 * 1024 * 1024) { // 2 MiB
+      setUploadErr('Image too large (max 2 MB).');
+      e.target.value = '';
+      return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', f);
+      const res = await fetch('/api/uploads', { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok || !data?.path) {
+        throw new Error(data?.message || `Upload failed (${res.status})`);
+      }
+      setImagePath(data.path);
+    } catch (err: any) {
+      setUploadErr(err?.message || String(err));
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  }
+
+  function clearImage() {
+    setImagePath(null);
+  }
+
   return (
     <div className="space-y-6 max-w-3xl">
       <h2 className="text-xl font-semibold">{isEdit ? 'Edit recipe' : 'Create recipe'}</h2>
@@ -122,6 +153,27 @@ export default function RecipeForm() {
         <div>
           <label className="block text-sm mb-1">Description</label>
           <textarea className="border rounded px-3 py-2 w-full min-h-24" value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+
+        {/* Image */}
+        <div className="space-y-2">
+          <label className="block text-sm">Image (max 2 MB)</label>
+          {imagePath ? (
+            <div className="flex items-center gap-3">
+              <img
+                src={imagePath}
+                alt="Recipe"
+                className="w-32 h-32 object-cover rounded border"
+              />
+              <button type="button" className="border rounded px-3 py-2" onClick={clearImage}>
+                Remove
+              </button>
+            </div>
+          ) : (
+            <input type="file" accept="image/*" onChange={onPickFile} disabled={uploading} />
+          )}
+          {uploading && <div className="text-sm text-gray-600">Uploading…</div>}
+          {uploadErr && <div className="text-sm text-red-600">{uploadErr}</div>}
         </div>
 
         <div className="grid md:grid-cols-2 gap-4">

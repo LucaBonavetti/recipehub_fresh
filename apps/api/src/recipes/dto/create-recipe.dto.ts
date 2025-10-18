@@ -38,4 +38,9 @@ export class CreateRecipeDto {
   @IsInt()
   @Min(0)
   cookMinutes?: number | null;
+
+  // path like /uploads/abc.jpg
+  @IsOptional()
+  @IsString()
+  imagePath?: string | null;
 }

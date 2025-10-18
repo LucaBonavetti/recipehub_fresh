@@ -24,4 +24,7 @@ model Recipe {
   servings    Int?
   prepMinutes Int?
   cookMinutes Int?
+
+  // single image stored locally and served at /uploads/<filename>
+  imagePath   String?
 }

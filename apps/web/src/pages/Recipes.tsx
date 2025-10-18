@@ -7,6 +7,7 @@ type Recipe = {
   description?: string | null;
   tags?: string[];
   createdAt?: string;
+  imagePath?: string | null;
 };
 
 type ApiList<T> = { total: number; items: T[] };
@@ -15,6 +16,7 @@ export default function Recipes() {
   const [recipes, setRecipes] = React.useState<Recipe[]>([]);
   const [total, setTotal] = React.useState(0);
   const [error, setError] = React.useState<string | null>(null);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   // Filters
   const [q, setQ] = React.useState('');
@@ -79,6 +81,23 @@ export default function Recipes() {
     load();
   }
 
+  async function onDelete(id: string) {
+    if (!confirm('Delete this recipe?')) return;
+    setDeletingId(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/recipes/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+      // Optimistic update: remove from current page and decrease total
+      setRecipes((list) => list.filter((r) => r.id !== id));
+      setTotal((t) => Math.max(0, t - 1));
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   return (
@@ -132,10 +151,28 @@ export default function Recipes() {
 
       {error && <div className="text-red-600">{error}</div>}
 
+      {/* Results */}
       <ul className="space-y-2">
         {recipes.map((r) => (
-          <li key={r.id} className="border rounded p-3 flex items-center justify-between">
-            <div className="min-w-0">
+          <li key={r.id} className="border rounded p-3 flex items-center gap-4">
+            {/* Thumbnail */}
+            <div className="w-16 h-16 border rounded overflow-hidden bg-gray-50 flex-shrink-0">
+              {r.imagePath ? (
+                <img
+                  src={r.imagePath}
+                  alt={r.title}
+                  className="w-full h-full object-cover"
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }}
+                />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                  No image
+                </div>
+              )}
+            </div>
+
+            {/* Title & meta */}
+            <div className="min-w-0 flex-1">
               <Link to={`/recipes/${r.id}`} className="font-medium hover:underline truncate block">
                 {r.title}
               </Link>
@@ -150,7 +187,19 @@ export default function Recipes() {
                 </div>
               )}
             </div>
-            <Link to={`/recipes/${r.id}/edit`} className="text-sm underline">Edit</Link>
+
+            {/* Actions */}
+            <div className="flex items-center gap-3">
+              <Link to={`/recipes/${r.id}/edit`} className="text-sm underline">Edit</Link>
+              <button
+                className="text-sm text-red-600 underline disabled:opacity-50"
+                onClick={() => onDelete(r.id)}
+                disabled={deletingId === r.id}
+                title="Delete"
+              >
+                {deletingId === r.id ? 'Deleting…' : 'Delete'}
+              </button>
+            </div>
           </li>
         ))}
       </ul>

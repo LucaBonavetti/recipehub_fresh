@@ -15,28 +15,15 @@ type ListParams = {
 export class RecipesService {
   constructor(private prisma: PrismaService) {}
 
-  /**
-   * List recipes with optional search, tag filtering, sorting, and pagination.
-   * Note: To keep this SQLite-friendly, we do case-insensitive search and tag
-   * filtering in memory (OK for dev/small datasets).
-   */
   async list(params: ListParams = {}) {
-    const {
-      q,
-      tags,
-      order = 'recent',
-      limit = 100,
-      offset = 0,
-    } = params;
+    const { q, tags, order = 'recent', limit = 100, offset = 0 } = params;
 
-    // Order in DB for efficiency; filter in memory for SQLite compatibility
     const rows = await this.prisma.recipe.findMany({
       orderBy: order === 'title' ? { title: 'asc' } : { createdAt: 'desc' },
     });
 
     let filtered = rows;
 
-    // Case-insensitive search on title/description (in memory)
     if (q && q.trim()) {
       const needle = q.trim().toLowerCase();
       filtered = filtered.filter((r) => {
@@ -46,7 +33,6 @@ export class RecipesService {
       });
     }
 
-    // Tag filter (AND logic) in memory; tags stored as JSON string[]
     if (tags && tags.length) {
       filtered = filtered.filter((r) => {
         const arr: string[] = Array.isArray((r as any).tags) ? (r as any).tags : [];
@@ -55,15 +41,11 @@ export class RecipesService {
       });
     }
 
-    // Paginate in memory
     const start = Math.max(0, Number(offset) || 0);
     const end = start + (Math.max(1, Math.min(500, Number(limit) || 100)));
     const page = filtered.slice(start, end);
 
-    return {
-      total: filtered.length,
-      items: page,
-    };
+    return { total: filtered.length, items: page };
   }
 
   async get(id: string) {
@@ -83,12 +65,13 @@ export class RecipesService {
         servings: dto.servings ?? null,
         prepMinutes: dto.prepMinutes ?? null,
         cookMinutes: dto.cookMinutes ?? null,
+        imagePath: dto.imagePath ?? null,
       },
     });
   }
 
   async update(id: string, dto: UpdateRecipeDto) {
-    await this.get(id); // throws if missing
+    await this.get(id);
     return this.prisma.recipe.update({
       where: { id },
       data: {
@@ -100,12 +83,13 @@ export class RecipesService {
         servings: dto.servings ?? undefined,
         prepMinutes: dto.prepMinutes ?? undefined,
         cookMinutes: dto.cookMinutes ?? undefined,
+        imagePath: dto.imagePath ?? undefined,
       },
     });
   }
 
   async remove(id: string) {
-    await this.get(id); // throws if missing
+    await this.get(id);
     await this.prisma.recipe.delete({ where: { id } });
     return { ok: true };
   }

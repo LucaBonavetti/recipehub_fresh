@@ -39,4 +39,8 @@ export class UpdateRecipeDto {
   @IsInt()
   @Min(0)
   cookMinutes?: number | null;
+
+  @IsOptional()
+  @IsString()
+  imagePath?: string | null;
 }
