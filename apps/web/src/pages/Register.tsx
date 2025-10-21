@@ -5,6 +5,7 @@ import { useAuth } from '../auth/AuthProvider';
 export default function Register() {
   const nav = useNavigate();
   const { register } = useAuth();
+
   const [email, setEmail] = React.useState('');
   const [displayName, setDisplayName] = React.useState('');
   const [password, setPassword] = React.useState('');
@@ -26,25 +27,35 @@ export default function Register() {
   }
 
   return (
-    <div className="space-y-4 max-w-sm">
-      <h2 className="text-xl font-semibold">Register</h2>
-      {err && <div className="text-red-600">{err}</div>}
+    <div className="space-y-4 max-w-md">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Register</h2>
+        <Link to="/recipes" className="underline">← Back to list</Link>
+      </div>
+      {err && <p className="text-red-600">{err}</p>}
       <form onSubmit={submit} className="space-y-3">
         <div>
-          <label className="block text-sm mb-1">Display name</label>
-          <input className="border rounded px-3 py-2 w-full" required value={displayName} onChange={e=>setDisplayName(e.target.value)} />
+          <label className="block text-sm font-medium">Display name</label>
+          <input className="border rounded px-2 py-1 w-full" value={displayName} onChange={(e) => setDisplayName(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-sm mb-1">Email</label>
-          <input className="border rounded px-3 py-2 w-full" type="email" required value={email} onChange={e=>setEmail(e.target.value)} />
+          <label className="block text-sm font-medium">Email</label>
+          <input className="border rounded px-2 py-1 w-full" value={email} onChange={(e) => setEmail(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-sm mb-1">Password</label>
-          <input className="border rounded px-3 py-2 w-full" type="password" required value={password} onChange={e=>setPassword(e.target.value)} />
+          <label className="block text-sm font-medium">Password</label>
+          <input type="password" className="border rounded px-2 py-1 w-full" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </div>
-        <button className="border rounded px-4 py-2" disabled={loading}>{loading ? 'Creating…' : 'Register'}</button>
+        <button className="border rounded px-4 py-1" type="submit" disabled={loading}>
+          {loading ? 'Registering…' : 'Register'}
+        </button>
       </form>
-      <div className="text-sm">Already have an account? <Link to="/login" className="underline">Login</Link></div>
+      <div className="text-sm">
+        Already have an account?{' '}
+        <Link className="underline" to="/login">
+          Login
+        </Link>
+      </div>
     </div>
   );
 }

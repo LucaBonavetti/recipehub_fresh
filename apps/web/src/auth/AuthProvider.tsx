@@ -24,7 +24,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setError(null);
     try {
       const r = await apiFetch('/api/auth/me');
-      // If not logged in, API returns 401 because of the guard. Treat as anonymous.
       if (r.status === 401) {
         setUser(null);
         return;
@@ -33,7 +32,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const j = await r.json();
       setUser(j.user ?? null);
     } catch (e: any) {
-      // Don't spam errors in UI for anonymous state
       setError(e?.message || String(e));
       setUser(null);
     } finally {
@@ -64,7 +62,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       body: JSON.stringify({ email, password, displayName }),
     });
     if (!r.ok) throw new Error(`Register failed (${r.status})`);
-    // auto-login afterward
     await login(email, password);
   }
 

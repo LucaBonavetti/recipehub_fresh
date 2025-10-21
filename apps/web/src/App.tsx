@@ -12,10 +12,21 @@ export default function App() {
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-semibold">RecipeHub</h1>
             <nav className="flex gap-4 text-sm">
-              <NavLink to="/" className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`} end>
+              <NavLink
+                to="/"
+                end
+                className={({ isActive }) =>
+                  `hover:underline ${isActive ? 'font-semibold' : ''}`
+                }
+              >
                 Home
               </NavLink>
-              <NavLink to="/recipes" className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`}>
+              <NavLink
+                to="/recipes"
+                className={({ isActive }) =>
+                  `hover:underline ${isActive ? 'font-semibold' : ''}`
+                }
+              >
                 Recipes
               </NavLink>
             </nav>
@@ -24,15 +35,25 @@ export default function App() {
           <div className="flex items-center gap-3 text-sm">
             {user ? (
               <>
-                <span className="text-gray-700">Hello, <span className="font-medium">{user.displayName}</span></span>
-                <button className="text-red-600 hover:underline" onClick={async()=>{ await logout(); nav('/'); }}>
+                <span className="text-gray-600">Hello, {user.displayName}</span>
+                <button
+                  className="text-red-600 hover:underline"
+                  onClick={async () => {
+                    await logout();
+                    nav('/');
+                  }}
+                >
                   Logout
                 </button>
               </>
             ) : (
               <>
-                <button className="hover:underline" onClick={()=>nav('/login')}>Login</button>
-                <button className="hover:underline" onClick={()=>nav('/register')}>Register</button>
+                <button className="hover:underline" onClick={() => nav('/login')}>
+                  Login
+                </button>
+                <button className="hover:underline" onClick={() => nav('/register')}>
+                  Register
+                </button>
               </>
             )}
           </div>

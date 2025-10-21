@@ -1,227 +1,270 @@
 import React from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams, Link } from 'react-router-dom';
 import { apiFetch } from '../api';
+import { useAuth } from '../auth/AuthProvider';
 
 type RecipeIn = {
   title: string;
   description?: string | null;
-  ingredients: string[];
-  steps: string[];
-  tags: string[];
+  ingredients?: string[];
+  steps?: string[];
+  tags?: string[];
   servings?: number | null;
   prepMinutes?: number | null;
   cookMinutes?: number | null;
-  isPublic: boolean;
   imagePath?: string | null;
   sourceUrl?: string | null;
+  isPublic?: boolean;
 };
 
-type Recipe = RecipeIn & { id: string };
+function toLines(v?: string[] | null) {
+  return Array.isArray(v) ? v.join('\n') : '';
+}
+function toArray(v: string) {
+  return v
+    .split('\n')
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
 
 export default function RecipeForm() {
+  const { user } = useAuth();
   const nav = useNavigate();
   const { id } = useParams<{ id: string }>();
-  const editing = Boolean(id);
+  const isEdit = Boolean(id);
 
-  const [form, setForm] = React.useState<RecipeIn>({
+  const [data, setData] = React.useState<RecipeIn>({
     title: '',
     description: '',
     ingredients: [],
     steps: [],
     tags: [],
-    servings: 1,
+    servings: null,
     prepMinutes: null,
     cookMinutes: null,
-    isPublic: true,
     imagePath: null,
     sourceUrl: null,
+    isPublic: true,
   });
 
-  const [imagePreview, setImagePreview] = React.useState<string | null>(null);
-  const [file, setFile] = React.useState<File | null>(null);
-  const [err, setErr] = React.useState<string | null>(null);
+  const [imageFile, setImageFile] = React.useState<File | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
-  const [loading, setLoading] = React.useState(editing);
 
   React.useEffect(() => {
-    if (!editing) return;
+    if (!isEdit) return;
     (async () => {
       try {
-        const res = await apiFetch(`/api/recipes/${id}`);
-        if (!res.ok) throw new Error(`Failed to load (${res.status})`);
-        const data: Recipe = await res.json();
-        setForm({
-          title: data.title,
-          description: data.description ?? '',
-          ingredients: data.ingredients ?? [],
-          steps: data.steps ?? [],
-          tags: data.tags ?? [],
-          servings: data.servings ?? null,
-          prepMinutes: data.prepMinutes ?? null,
-          cookMinutes: data.cookMinutes ?? null,
-          isPublic: data.isPublic ?? true,
-          imagePath: data.imagePath ?? null,
-          sourceUrl: data.sourceUrl ?? null,
+        const r = await apiFetch(`/api/recipes/${id}`);
+        if (!r.ok) throw new Error(`Failed to load (${r.status})`);
+        const j = await r.json();
+        setData({
+          title: j.title ?? '',
+          description: j.description ?? '',
+          ingredients: j.ingredients ?? [],
+          steps: j.steps ?? [],
+          tags: j.tags ?? [],
+          servings: j.servings ?? null,
+          prepMinutes: j.prepMinutes ?? null,
+          cookMinutes: j.cookMinutes ?? null,
+          imagePath: j.imagePath ?? null,
+          sourceUrl: j.sourceUrl ?? null,
+          isPublic: j.isPublic ?? true,
         });
-        setImagePreview(data.imagePath ?? null);
       } catch (e: any) {
-        setErr(e?.message || String(e));
-      } finally {
-        setLoading(false);
+        setError(e?.message || String(e));
       }
     })();
-  }, [editing, id]);
+  }, [isEdit, id]);
 
-  function set<K extends keyof RecipeIn>(key: K, val: RecipeIn[K]) {
-    setForm((f) => ({ ...f, [key]: val }));
-  }
-
-  async function uploadIfNeeded(): Promise<string | null | undefined> {
-    if (!file) return form.imagePath ?? null;
-    const body = new FormData();
-    body.append('file', file);
-    const res = await apiFetch('/api/uploads/image', { method: 'POST', body });
-    if (!res.ok) throw new Error(`Image upload failed (${res.status})`);
-    const j = await res.json();
+  async function uploadImageIfNeeded(): Promise<string | null | undefined> {
+    if (!imageFile) return data.imagePath ?? null;
+    const form = new FormData();
+    form.append('file', imageFile);
+    const r = await apiFetch('/api/uploads', { method: 'POST', body: form });
+    if (!r.ok) throw new Error(`Upload failed (${r.status})`);
+    const j = await r.json();
     return j.path as string;
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setErr(null);
+    if (!user) {
+      alert('Please login first.');
+      return;
+    }
     setSaving(true);
+    setError(null);
     try {
-      // 1) upload image if provided
-      const imagePath = await uploadIfNeeded();
-
-      // 2) build payload
+      const imagePath = await uploadImageIfNeeded();
       const payload: RecipeIn = {
-        ...form,
+        ...data,
         imagePath: imagePath ?? null,
-        // normalize textareas
-        ingredients: (Array.isArray(form.ingredients) ? form.ingredients : (form.ingredients ?? []))
-          .map(String).map((s) => s.trim()).filter(Boolean),
-        steps: (Array.isArray(form.steps) ? form.steps : (form.steps ?? []))
-          .map(String).map((s) => s.trim()).filter(Boolean),
-        tags: (Array.isArray(form.tags) ? form.tags : (form.tags ?? []))
-          .map((s) => s.trim()).filter(Boolean),
+        ingredients: toArray((document.getElementById('ingredients') as HTMLTextAreaElement).value),
+        steps: toArray((document.getElementById('steps') as HTMLTextAreaElement).value),
+        tags: toArray((document.getElementById('tags') as HTMLTextAreaElement).value),
       };
 
-      // 3) send create/update with apiFetch (sends cookies)
-      const res = await apiFetch(editing ? `/api/recipes/${id}` : '/api/recipes', {
-        method: editing ? 'PATCH' : 'POST',
+      const url = isEdit ? `/api/recipes/${id}` : '/api/recipes';
+      const method = isEdit ? 'PATCH' : 'POST';
+      const r = await apiFetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(`${editing ? 'Save' : 'Create'} failed (${res.status})`);
-      const saved: Recipe = await res.json();
-
-      // 4) go to details (RecipeDetails also uses apiFetch, so cookie will be sent)
-      nav(`/recipes/${saved.id}`);
+      if (!r.ok) throw new Error(`${isEdit ? 'Update' : 'Create'} failed (${r.status})`);
+      const j = await r.json();
+      nav(`/recipes/${j.id}`);
     } catch (e: any) {
-      setErr(e?.message || String(e));
+      setError(e?.message || String(e));
     } finally {
       setSaving(false);
     }
   }
 
-  function onFileChange(ev: React.ChangeEvent<HTMLInputElement>) {
-    const f = ev.target.files?.[0] ?? null;
-    setFile(f);
-    setImagePreview(f ? URL.createObjectURL(f) : form.imagePath ?? null);
-  }
-
-  if (loading) return <div>Loading…</div>;
-
   return (
-    <div className="space-y-6 max-w-3xl">
-      <h2 className="text-xl font-semibold">{editing ? 'Edit Recipe' : 'Create Recipe'}</h2>
-      {err && <div className="text-red-600">{err}</div>}
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">{isEdit ? 'Edit recipe' : 'Create recipe'}</h2>
+        <Link to="/recipes" className="underline">
+          ← Back to list
+        </Link>
+      </div>
 
-      <form onSubmit={submit} className="space-y-4">
+      {error && <p className="text-red-600">{error}</p>}
+
+      <form onSubmit={submit} className="space-y-4 max-w-3xl">
         <div>
-          <label className="block text-sm mb-1">Title</label>
-          <input className="border rounded px-3 py-2 w-full"
-                 value={form.title}
-                 onChange={(e)=>set('title', e.target.value)} required />
-        </div>
-
-        <div>
-          <label className="block text-sm mb-1">Description</label>
-          <textarea className="border rounded px-3 py-2 w-full min-h-[100px]"
-                    value={form.description ?? ''} onChange={(e)=>set('description', e.target.value)} />
-        </div>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-sm mb-1">Ingredients (one per line)</label>
-            <textarea className="border rounded px-3 py-2 w-full min-h-[160px]"
-              value={(form.ingredients ?? []).join('\n')}
-              onChange={(e)=>set('ingredients', e.target.value.split('\n'))} />
-          </div>
-          <div>
-            <label className="block text-sm mb-1">Steps (one per line)</label>
-            <textarea className="border rounded px-3 py-2 w-full min-h-[160px]"
-              value={(form.steps ?? []).join('\n')}
-              onChange={(e)=>set('steps', e.target.value.split('\n'))} />
-          </div>
+          <label className="block text-sm font-medium">Title</label>
+          <input
+            className="border rounded px-2 py-1 w-full"
+            value={data.title}
+            onChange={(e) => setData({ ...data, title: e.target.value })}
+            required
+          />
         </div>
 
         <div>
-          <label className="block text-sm mb-1">Tags (comma separated)</label>
-          <input className="border rounded px-3 py-2 w-full"
-                 value={(form.tags ?? []).join(', ')}
-                 onChange={(e)=>set('tags', e.target.value.split(',').map(s=>s.trim()).filter(Boolean))} />
+          <label className="block text-sm font-medium">Description</label>
+          <textarea
+            className="border rounded px-2 py-1 w-full min-h-[80px]"
+            value={data.description ?? ''}
+            onChange={(e) => setData({ ...data, description: e.target.value })}
+          />
         </div>
 
-        <div className="grid md:grid-cols-3 gap-4">
+        <div className="grid md:grid-cols-3 gap-3">
           <div>
-            <label className="block text-sm mb-1">Servings</label>
-            <input type="number" min={1} className="border rounded px-3 py-2 w-full"
-                   value={form.servings ?? 1}
-                   onChange={(e)=>set('servings', Number(e.target.value) || 1)} />
+            <label className="block text-sm font-medium">Servings</label>
+            <input
+              type="number"
+              min={1}
+              className="border rounded px-2 py-1 w-full"
+              value={data.servings ?? ''}
+              onChange={(e) =>
+                setData({ ...data, servings: e.target.value ? Number(e.target.value) : null })
+              }
+            />
           </div>
           <div>
-            <label className="block text-sm mb-1">Prep minutes</label>
-            <input type="number" min={0} className="border rounded px-3 py-2 w-full"
-                   value={form.prepMinutes ?? 0}
-                   onChange={(e)=>set('prepMinutes', Number(e.target.value) || 0)} />
+            <label className="block text-sm font-medium">Prep (min)</label>
+            <input
+              type="number"
+              min={0}
+              className="border rounded px-2 py-1 w-full"
+              value={data.prepMinutes ?? ''}
+              onChange={(e) =>
+                setData({ ...data, prepMinutes: e.target.value ? Number(e.target.value) : null })
+              }
+            />
           </div>
           <div>
-            <label className="block text-sm mb-1">Cook minutes</label>
-            <input type="number" min={0} className="border rounded px-3 py-2 w-full"
-                   value={form.cookMinutes ?? 0}
-                   onChange={(e)=>set('cookMinutes', Number(e.target.value) || 0)} />
+            <label className="block text-sm font-medium">Cook (min)</label>
+            <input
+              type="number"
+              min={0}
+              className="border rounded px-2 py-1 w-full"
+              value={data.cookMinutes ?? ''}
+              onChange={(e) =>
+                setData({ ...data, cookMinutes: e.target.value ? Number(e.target.value) : null })
+              }
+            />
           </div>
         </div>
 
         <div>
-          <label className="block text-sm mb-1">Source URL</label>
-          <input className="border rounded px-3 py-2 w-full"
-                 value={form.sourceUrl ?? ''}
-                 onChange={(e)=>set('sourceUrl', e.target.value || null)} />
+          <label className="block text-sm font-medium">Ingredients (one per line)</label>
+          <textarea
+            id="ingredients"
+            className="border rounded px-2 py-1 w-full min-h-[120px]"
+            defaultValue={toLines(data.ingredients)}
+          />
         </div>
 
-        <div className="flex items-center gap-4">
-          <label className="flex items-center gap-2">
-            <input type="checkbox" checked={form.isPublic} onChange={(e)=>set('isPublic', e.target.checked)} />
-            <span>Public</span>
-          </label>
+        <div>
+          <label className="block text-sm font-medium">Steps (one per line)</label>
+          <textarea
+            id="steps"
+            className="border rounded px-2 py-1 w-full min-h-[120px]"
+            defaultValue={toLines(data.steps)}
+          />
         </div>
 
-        <div className="space-y-2">
-          <label className="block text-sm">Image (max 2 MB)</label>
-          <input type="file" accept="image/*" onChange={onFileChange} />
-          {imagePreview && (
-            <img src={imagePreview} alt="Preview" className="w-52 h-52 object-cover border rounded" />
+        <div>
+          <label className="block text-sm font-medium">Tags (one per line)</label>
+          <textarea
+            id="tags"
+            className="border rounded px-2 py-1 w-full min-h-[60px]"
+            defaultValue={toLines(data.tags)}
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">Source URL</label>
+          <input
+            type="url"
+            className="border rounded px-2 py-1 w-full"
+            value={data.sourceUrl ?? ''}
+            onChange={(e) => setData({ ...data, sourceUrl: e.target.value || null })}
+            placeholder="https://example.com/blog/recipe"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium">Image</label>
+          <input
+            type="file"
+            accept="image/*"
+            onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+          />
+          {data.imagePath && !imageFile && (
+            <div className="mt-2">
+              <img src={data.imagePath} alt="" className="w-32 h-32 object-cover rounded" />
+            </div>
           )}
         </div>
 
-        <div className="flex gap-2">
-          <button className="border rounded px-4 py-2" disabled={saving}>
-            {saving ? (editing ? 'Saving…' : 'Creating…') : (editing ? 'Save' : 'Create')}
+        <div className="flex items-center gap-2">
+          <input
+            id="isPublic"
+            type="checkbox"
+            checked={Boolean(data.isPublic)}
+            onChange={(e) => setData({ ...data, isPublic: e.target.checked })}
+          />
+          <label htmlFor="isPublic">Public</label>
+        </div>
+
+        <div className="flex gap-3">
+          <button
+            className="border rounded px-4 py-1"
+            type="submit"
+            disabled={saving}
+          >
+            {saving ? (isEdit ? 'Saving…' : 'Creating…') : isEdit ? 'Save' : 'Create'}
           </button>
-          <button type="button" className="border rounded px-4 py-2" onClick={()=>nav(-1)}>Cancel</button>
+          <Link to="/recipes" className="underline">
+            Cancel
+          </Link>
         </div>
       </form>
     </div>
