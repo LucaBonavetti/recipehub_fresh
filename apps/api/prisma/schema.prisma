@@ -44,6 +44,10 @@ model Recipe {
   updatedAt   DateTime  @updatedAt
 
   favorites   Favorite[]
+
+  @@index([ownerId])
+  @@index([isPublic])
+  @@index([updatedAt])
 }
 
 model Favorite {

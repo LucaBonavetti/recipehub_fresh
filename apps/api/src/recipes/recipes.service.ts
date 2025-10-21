@@ -3,6 +3,14 @@ import { PrismaService } from '../prisma/prisma.service';
 
 type Viewer = { id?: string } | null;
 
+type ListOpts = {
+  q?: string;
+  visibility?: 'public' | 'mine' | 'all';
+  sort?: 'new' | 'old' | 'title';
+  page?: number;
+  pageSize?: number;
+};
+
 @Injectable()
 export class RecipesService {
   constructor(private prisma: PrismaService) {}
@@ -31,39 +39,53 @@ export class RecipesService {
     };
   }
 
-  async list(viewer: Viewer, q?: string) {
+  async list(viewer: Viewer, opts: ListOpts = {}) {
     const viewerId = viewer?.id;
+    let vis: 'public' | 'mine' | 'all' = (opts.visibility as any) || 'all';
+    if (!viewerId && vis !== 'public') vis = 'public';
 
-    const whereSearch =
-      q && q.trim()
-        ? {
-            OR: [
-              { title: { contains: q } },        // keep simple (case-sensitive) to satisfy your Prisma client types
-              { description: { contains: q } },
-            ],
-          }
-        : undefined;
+    const searchWhere = opts.q?.trim()
+      ? { OR: [{ title: { contains: opts.q } }, { description: { contains: opts.q } }] }
+      : undefined;
 
-    const all = await this.prisma.recipe.findMany({
-      orderBy: { updatedAt: 'desc' },
-      where: whereSearch,
-    });
+    let visibilityWhere: any;
+    if (vis === 'public') visibilityWhere = { isPublic: true };
+    else if (vis === 'mine') visibilityWhere = { ownerId: viewerId };
+    else visibilityWhere = viewerId
+      ? { OR: [{ isPublic: true }, { ownerId: viewerId }] }
+      : { isPublic: true };
 
-    // Only show public recipes or your own
-    const visible = all.filter((r) => r.isPublic || r.ownerId === viewerId);
+    const where = searchWhere ? { AND: [searchWhere, visibilityWhere] } : visibilityWhere;
 
-    // Compute favorite flags for viewer
+    let orderBy: any = { updatedAt: 'desc' };
+    if (opts.sort === 'old') orderBy = { updatedAt: 'asc' };
+    if (opts.sort === 'title') orderBy = { title: 'asc' };
+
+    const page = Math.max(1, Number.isFinite(opts.page!) ? Number(opts.page) : 1);
+    const pageSize = Math.min(50, Math.max(1, Number.isFinite(opts.pageSize!) ? Number(opts.pageSize) : 12));
+    const skip = (page - 1) * pageSize;
+
+    const [total, rows] = await this.prisma.$transaction([
+      this.prisma.recipe.count({ where }),
+      this.prisma.recipe.findMany({ where, orderBy, skip, take: pageSize }),
+    ]);
+
+    // Favorite flags for viewer
     let favSet = new Set<string>();
-    if (viewerId && visible.length) {
+    if (viewerId && rows.length) {
       const favs = await this.prisma.favorite.findMany({
-        where: { userId: viewerId, recipeId: { in: visible.map((r) => r.id) } },
+        where: { userId: viewerId, recipeId: { in: rows.map((r) => r.id) } },
         select: { recipeId: true },
       });
       favSet = new Set(favs.map((f) => f.recipeId));
     }
 
     return {
-      items: visible.map((r) => this.sanitize(r, viewerId, favSet.has(r.id))),
+      items: rows.map((r) => this.sanitize(r, viewerId, favSet.has(r.id))),
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(1, Math.ceil(total / pageSize)),
     };
   }
 
@@ -131,7 +153,6 @@ export class RecipesService {
       },
     });
 
-    // keep current favorite status for the updater
     const fav = await this.prisma.favorite.findUnique({
       where: { userId_recipeId: { userId, recipeId: id } },
       select: { recipeId: true },

@@ -11,7 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { RecipesService } from './recipes.service';
-  import { CreateRecipeDto } from './dto/create-recipe.dto';
+import { CreateRecipeDto } from './dto/create-recipe.dto';
 import { UpdateRecipeDto } from './dto/update-recipe.dto';
 import { OptionalJwtAuthGuard } from '../auth/optional-jwt.guard';
 import { JwtAuthGuard } from '../auth/jwt.guard';
@@ -22,9 +22,18 @@ export class RecipesController {
 
   @UseGuards(OptionalJwtAuthGuard)
   @Get()
-  async list(@Req() req: any, @Query('q') q?: string) {
+  async list(
+    @Req() req: any,
+    @Query('q') q?: string,
+    @Query('visibility') visibility?: 'public' | 'mine' | 'all',
+    @Query('sort') sort?: 'new' | 'old' | 'title',
+    @Query('page') pageStr?: string,
+    @Query('pageSize') pageSizeStr?: string,
+  ) {
     const viewer = req.user ?? null;
-    return this.recipes.list(viewer, q);
+    const page = Number.isFinite(Number(pageStr)) ? Number(pageStr) : undefined;
+    const pageSize = Number.isFinite(Number(pageSizeStr)) ? Number(pageSizeStr) : undefined;
+    return this.recipes.list(viewer, { q, visibility, sort, page, pageSize });
   }
 
   @UseGuards(OptionalJwtAuthGuard)
