@@ -4,43 +4,55 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  url      = "file:./dev.db"
 }
 
 model User {
   id          String   @id @default(cuid())
+  email       String   @unique
+  displayName String
+  password    String   // bcrypt hash
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  email       String   @unique
-  displayName String
-  passwordHash String
-
   recipes     Recipe[]
+  favorites   Favorite[]
+
+  // optional verification/reset tables omitted for brevity in this minimal schema
 }
 
 model Recipe {
   id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
   title       String
   description String?
-
   ingredients Json      // string[]
   steps       Json      // string[]
   tags        Json      // string[]
-
+  imagePath   String?
+  sourceUrl   String?
   servings    Int?
   prepMinutes Int?
   cookMinutes Int?
-
-  imagePath   String?
-  sourceUrl   String?
-
-  // Ownership & visibility
-  ownerId     String?
-  owner       User?     @relation(fields: [ownerId], references: [id])
-  ownerName   String?
   isPublic    Boolean   @default(true)
+
+  ownerId     String
+  ownerName   String?
+  owner       User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  favorites   Favorite[]
+}
+
+model Favorite {
+  userId    String
+  recipeId  String
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+
+  @@id([userId, recipeId])
 }

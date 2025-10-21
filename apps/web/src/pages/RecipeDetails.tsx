@@ -3,77 +3,33 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { apiFetch } from '../api';
 import { useAuth } from '../auth/AuthProvider';
 
-// helpers for scaling ingredient quantities
-function trimZeros(n: number, maxDecimals = 2) {
-  const s = n.toFixed(maxDecimals);
-  return s.replace(/\.?0+$/, '');
-}
+// (same scaling helpers as before — abbreviated to keep file readable)
+function trimZeros(n: number, maxDecimals = 2) { const s = n.toFixed(maxDecimals); return s.replace(/\.?0+$/, ''); }
 function parseLeadingQuantity(text: string) {
-  const s = text.trimStart();
-  const p = text.length - s.length;
-
-  // "1 1/2", "2 3/4"
-  let m = s.match(/^(\d+)\s+(\d+)\/(\d+)(\b|[^0-9/])/);
-  if (m) {
-    const w = +m[1], a = +m[2], b = +m[3];
-    if (b) return { value: w + a / b, length: p + m[0].length - m[4].length };
-  }
-  // "1/2"
-  m = s.match(/^(\d+)\/(\d+)(\b|[^0-9/])/);
-  if (m) {
-    const a = +m[1], b = +m[2];
-    if (b) return { value: a / b, length: p + m[0].length - m[3].length };
-  }
-  // "1.5"
-  m = s.match(/^(\d+(?:\.\d+)?)(\b|[^0-9.])/);
-  if (m) {
-    const v = parseFloat(m[1]);
-    if (!Number.isNaN(v)) return { value: v, length: p + m[0].length - m[2].length };
-  }
-  // "2" at string end
-  m = s.match(/^(\d+(?:\.\d+)?)$/);
-  if (m) {
-    const v = parseFloat(m[1]);
-    if (!Number.isNaN(v)) return { value: v, length: p + m[0].length };
-  }
+  const s = text.trimStart(); const p = text.length - s.length;
+  let m = s.match(/^(\d+)\s+(\d+)\/(\d+)(\b|[^0-9/])/); if (m) { const w=+m[1], a=+m[2], b=+m[3]; if (b) return { value: w + a/b, length: p + m[0].length - m[4].length }; }
+  m = s.match(/^(\d+)\/(\d+)(\b|[^0-9/])/); if (m) { const a=+m[1], b=+m[2]; if (b) return { value: a/b, length: p + m[0].length - m[3].length }; }
+  m = s.match(/^(\d+(?:\.\d+)?)(\b|[^0-9.])/); if (m) { const v=parseFloat(m[1]); if (!Number.isNaN(v)) return { value:v, length: p + m[0].length - m[2].length }; }
+  m = s.match(/^(\d+(?:\.\d+)?)$/); if (m) { const v=parseFloat(m[1]); if (!Number.isNaN(v)) return { value:v, length: p + m[0].length }; }
   return null;
 }
 function parseLeadingRange(text: string) {
-  const s = text.trimStart();
-  const p = text.length - s.length;
-  const m = s.match(
-    /^(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)\s*[-–]\s*(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)(\b|[^0-9/.\s])?/
-  );
+  const s = text.trimStart(); const p = text.length - s.length;
+  const m = s.match(/^(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)\s*[-–]\s*(\d+(?:\.\d+)?(?:\s+\d+\/\d+)?|\d+\/\d+)(\b|[^0-9/.\s])?/);
   if (!m) return null;
-  const toN = (t: string) => {
-    const mx = t.match(/^(\d+)\s+(\d+)\/(\d+)$/);
-    if (mx) return +mx[1] + (+mx[3] ? +mx[2] / +mx[3] : 0);
-    const fx = t.match(/^(\d+)\/(\d+)$/);
-    if (fx) return +fx[1] / +fx[2];
-    return parseFloat(t);
-  };
-  const a = toN(m[1]), b = toN(m[2]);
-  if ([a, b].some(Number.isNaN)) return null;
+  const toN = (t: string) => { const mx = t.match(/^(\d+)\s+(\d+)\/(\d+)$/); if (mx) return +mx[1] + (+mx[3] ? +mx[2] / +mx[3] : 0);
+    const fx = t.match(/^(\d+)\/(\d+)$/); if (fx) return +fx[1] / +fx[2]; return parseFloat(t); };
+  const a = toN(m[1]), b = toN(m[2]); if ([a,b].some(Number.isNaN)) return null;
   return { a, b, length: p + m[0].length - (m[3]?.length ?? 0) };
 }
 function scaleIngredientLine(line: string, factor: number) {
-  const t = line.trim();
-  if (!t) return line;
-  const r = parseLeadingRange(t);
-  if (r) {
-    const rest = t.slice(r.length).trimStart();
-    return `${trimZeros(r.a * factor)}–${trimZeros(r.b * factor)} ${rest}`.trim();
-  }
-  const q = parseLeadingQuantity(t);
-  if (q) {
-    const rest = t.slice(q.length).trimStart();
-    return `${trimZeros(q.value * factor)} ${rest}`.trim();
-  }
+  const t = line.trim(); if (!t) return line;
+  const r = parseLeadingRange(t); if (r) { const rest = t.slice(r.length).trimStart(); return `${trimZeros(r.a * factor)}–${trimZeros(r.b * factor)} ${rest}`.trim(); }
+  const q = parseLeadingQuantity(t); if (q) { const rest = t.slice(q.length).trimStart(); return `${trimZeros(q.value * factor)} ${rest}`.trim(); }
   return line;
 }
 function scaleIngredients(lines?: string[], factor?: number) {
-  if (!Array.isArray(lines) || !factor || factor === 1) return lines ?? [];
-  return lines.map((l) => scaleIngredientLine(l, factor));
+  if (!Array.isArray(lines) || !factor || factor === 1) return lines ?? []; return lines.map((l) => scaleIngredientLine(l, factor));
 }
 
 type Recipe = {
@@ -91,6 +47,7 @@ type Recipe = {
   isPublic?: boolean;
   ownerId?: string | null;
   ownerName?: string | null;
+  isFavorited?: boolean;
 };
 
 export default function RecipeDetails() {
@@ -102,6 +59,7 @@ export default function RecipeDetails() {
   const [error, setError] = React.useState<string | null>(null);
   const [deleting, setDeleting] = React.useState(false);
   const [targetServings, setTargetServings] = React.useState<number | null>(null);
+  const [toggling, setToggling] = React.useState(false);
 
   React.useEffect(() => {
     (async () => {
@@ -132,6 +90,21 @@ export default function RecipeDetails() {
     }
   }
 
+  async function toggleFav() {
+    if (!r) return;
+    if (!user) { navigate('/login'); return; }
+    setToggling(true);
+    try {
+      const res = await apiFetch(`/api/recipes/${r.id}/favorite`, { method: r.isFavorited ? 'DELETE' : 'POST' });
+      if (!res.ok) throw new Error(`${r.isFavorited ? 'Unfavorite' : 'Favorite'} failed (${res.status})`);
+      setR({ ...r, isFavorited: !r.isFavorited });
+    } catch (e: any) {
+      setError(e?.message || String(e));
+    } finally {
+      setToggling(false);
+    }
+  }
+
   if (error) return <p className="text-red-600">{error}</p>;
   if (!r) return <p>Loading…</p>;
 
@@ -149,7 +122,29 @@ export default function RecipeDetails() {
       </div>
 
       <div className="text-sm text-gray-500">
-        {r.isPublic ? 'Public' : 'Private'} {r.ownerName && <> · by {isOwner ? 'you' : r.ownerName}</>}
+        {r.isPublic ? 'Public' : 'Private'}{' '}
+        {r.ownerName && (
+          <>
+            · by{' '}
+            <Link to={`/users/${r.ownerId}`} className="underline">
+              {isOwner ? 'you' : r.ownerName}
+            </Link>
+          </>
+        )}
+      </div>
+
+      <div className="flex gap-3">
+        <button className="text-sm underline" onClick={toggleFav} disabled={toggling}>
+          {r.isFavorited ? '★ Unfavorite' : '☆ Favorite'}
+        </button>
+        {isOwner && (
+          <>
+            <Link className="text-sm underline" to={`/recipes/${r.id}/edit`}>Edit</Link>
+            <button className="text-sm text-red-600 underline" onClick={remove} disabled={deleting}>
+              {deleting ? 'Deleting…' : 'Delete'}
+            </button>
+          </>
+        )}
       </div>
 
       <div className="flex gap-4">
@@ -186,33 +181,14 @@ export default function RecipeDetails() {
 
       <div className="flex items-center gap-2">
         <span>Servings:</span>
-        <button
-          className="border rounded px-2"
-          onClick={() => setTargetServings((v) => Math.max(1, (v ?? baseServings) - 1))}
-        >
-          –
-        </button>
+        <button className="border rounded px-2" onClick={() => setTargetServings((v) => Math.max(1, (v ?? baseServings) - 1))}>–</button>
         <input
-          type="number"
-          min={1}
-          className="border rounded px-2 w-20"
+          type="number" min={1} className="border rounded px-2 w-20"
           value={curServings}
-          onChange={(e) => {
-            const v = Number(e.target.value);
-            if (Number.isFinite(v) && v >= 1) setTargetServings(v);
-          }}
+          onChange={(e) => { const v = Number(e.target.value); if (Number.isFinite(v) && v >= 1) setTargetServings(v); }}
         />
-        <button
-          className="border rounded px-2"
-          onClick={() => setTargetServings((v) => (v ?? baseServings) + 1)}
-        >
-          +
-        </button>
-        <button
-          className="border rounded px-2"
-          onClick={() => setTargetServings(baseServings)}
-          disabled={curServings === baseServings}
-        >
+        <button className="border rounded px-2" onClick={() => setTargetServings((v) => (v ?? baseServings) + 1)}>+</button>
+        <button className="border rounded px-2" onClick={() => setTargetServings(baseServings)} disabled={curServings === baseServings}>
           Reset to base ({baseServings})
         </button>
       </div>
@@ -221,36 +197,19 @@ export default function RecipeDetails() {
         <h3 className="font-semibold">Ingredients</h3>
         {scaledIngredients?.length ? (
           <ul className="list-disc pl-6">
-            {scaledIngredients.map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
+            {scaledIngredients.map((line, i) => <li key={i}>{line}</li>)}
           </ul>
-        ) : (
-          <p>—</p>
-        )}
+        ) : <p>—</p>}
       </div>
 
       <div>
         <h3 className="font-semibold">Steps</h3>
         {r.steps?.length ? (
           <ol className="list-decimal pl-6">
-            {r.steps.map((line, i) => (
-              <li key={i}>{line}</li>
-            ))}
+            {r.steps.map((line, i) => <li key={i}>{line}</li>)}
           </ol>
-        ) : (
-          <p>—</p>
-        )}
+        ) : <p>—</p>}
       </div>
-
-      {isOwner && (
-        <div className="flex gap-3">
-          <Link className="underline" to={`/recipes/${r.id}/edit`}>Edit</Link>
-          <button className="underline text-red-600" onClick={remove} disabled={deleting}>
-            {deleting ? 'Deleting…' : 'Delete'}
-          </button>
-        </div>
-      )}
     </div>
   );
 }

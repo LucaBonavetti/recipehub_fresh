@@ -3,13 +3,18 @@ import { AuthModule } from './auth/auth.module';
 import { RecipesModule } from './recipes/recipes.module';
 import { UploadsModule } from './uploads/uploads.module';
 import { PrismaService } from './prisma/prisma.service';
+import { FavoritesModule } from './favorites/favorites.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
-    AuthModule,     // <-- mounts /api/auth/*
-    RecipesModule,  // <-- mounts /api/recipes/*
-    UploadsModule,  // <-- mounts /api/uploads/*
+    AuthModule,
+    RecipesModule,
+    UploadsModule,
+    FavoritesModule,
+    UsersModule,
   ],
+  controllers: [],
   providers: [PrismaService],
 })
 export class AppModule {}

@@ -11,6 +11,8 @@ import RecipeDetails from './pages/RecipeDetails';
 import RecipeForm from './pages/RecipeForm';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import Favorites from './pages/Favorites';
+import Profile from './pages/Profile';
 
 function Home() {
   return (
@@ -44,6 +46,8 @@ const router = createBrowserRouter([
       { path: 'recipes/new', element: <RecipeForm /> },
       { path: 'recipes/:id', element: <RecipeDetails /> },
       { path: 'recipes/:id/edit', element: <RecipeForm /> },
+      { path: 'favorites', element: <Favorites /> },
+      { path: 'users/:id', element: <Profile /> },
       { path: 'login', element: <Login /> },
       { path: 'register', element: <Register /> },
       { path: '*', element: <NotFound /> },

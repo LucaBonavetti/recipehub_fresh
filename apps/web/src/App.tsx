@@ -12,23 +12,22 @@ export default function App() {
           <div className="flex items-center gap-4">
             <h1 className="text-lg font-semibold">RecipeHub</h1>
             <nav className="flex gap-4 text-sm">
-              <NavLink
-                to="/"
-                end
-                className={({ isActive }) =>
-                  `hover:underline ${isActive ? 'font-semibold' : ''}`
-                }
-              >
+              <NavLink to="/" end className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`}>
                 Home
               </NavLink>
-              <NavLink
-                to="/recipes"
-                className={({ isActive }) =>
-                  `hover:underline ${isActive ? 'font-semibold' : ''}`
-                }
-              >
+              <NavLink to="/recipes" className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`}>
                 Recipes
               </NavLink>
+              {user && (
+                <>
+                  <NavLink to="/favorites" className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`}>
+                    Favorites
+                  </NavLink>
+                  <NavLink to={`/users/${user.id}`} className={({ isActive }) => `hover:underline ${isActive ? 'font-semibold' : ''}`}>
+                    Profile
+                  </NavLink>
+                </>
+              )}
             </nav>
           </div>
 
@@ -36,13 +35,7 @@ export default function App() {
             {user ? (
               <>
                 <span className="text-gray-600">Hello, {user.displayName}</span>
-                <button
-                  className="text-red-600 hover:underline"
-                  onClick={async () => {
-                    await logout();
-                    nav('/');
-                  }}
-                >
+                <button className="text-red-600 hover:underline" onClick={async () => { await logout(); nav('/'); }}>
                   Logout
                 </button>
               </>

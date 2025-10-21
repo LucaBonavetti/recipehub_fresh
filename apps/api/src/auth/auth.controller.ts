@@ -1,42 +1,65 @@
-import { Body, Controller, Get, Post, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Post,
+  Res,
+  UseGuards,
+  Req,
+  HttpCode,
+} from '@nestjs/common';
 import { Response } from 'express';
 import { AuthService } from './auth.service';
+import { OptionalJwtAuthGuard } from './optional-jwt.guard';
+
+// If you already have DTOs in ./dto.ts, import them.
+// They should at least contain: email, password, and for register also displayName.
 import { LoginDto, RegisterDto } from './dto';
-import { JwtAuthGuard } from './jwt.guard';
+
+const COOKIE_NAME = 'access_token';
 
 @Controller('api/auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(private readonly auth: AuthService) {}
+
+  private setAuthCookie(res: Response, token: string) {
+    // For local dev: secure=false; in production behind HTTPS set secure=true
+    res.cookie(COOKIE_NAME, token, {
+      httpOnly: true,
+      sameSite: 'lax',
+      secure: false,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/',
+    });
+  }
 
   @Post('register')
-  async register(@Body() dto: RegisterDto) {
-    const u = await this.auth.register(dto.email, dto.password, dto.displayName);
-    return { ok: true, user: u };
+  async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
+    const { token, user } = await this.auth.register(dto.email, dto.password, dto.displayName);
+    this.setAuthCookie(res, token);
+    return { user };
   }
 
+  @HttpCode(200)
   @Post('login')
-  async login(@Body() dto: LoginDto, @Res() res: Response) {
-    const u = await this.auth.validate(dto.email, dto.password);
-    const pub = this.auth.toPublic(u);
-    const { cookie } = this.auth.signAccessCookie(pub);
-    res.setHeader('Set-Cookie', cookie);
-    return res.json({ ok: true, user: pub });
+  async login(@Body() dto: LoginDto, @Res({ passthrough: true }) res: Response) {
+    const { token, user } = await this.auth.login(dto.email, dto.password);
+    this.setAuthCookie(res, token);
+    return { user };
   }
 
+  @HttpCode(200)
   @Post('logout')
-  async logout(@Res() res: Response) {
-    const isProd = process.env.NODE_ENV === 'production';
-    res.setHeader(
-      'Set-Cookie',
-      `access_token=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax${isProd ? '; Secure' : ''}`,
-    );
-    return res.json({ ok: true });
+  async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie(COOKIE_NAME, { path: '/' });
+    return { ok: true };
   }
 
-  // Require a valid JWT; when logged-in, req.user is set by JwtStrategy
-  @UseGuards(JwtAuthGuard)
+  // Returns the current user if logged in (cookie present), else null
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('me')
   async me(@Req() req: any) {
-    return { user: req.user };
+    if (!req.user?.id) return { user: null };
+    return this.auth.me(req.user.id);
   }
 }

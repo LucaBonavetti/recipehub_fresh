@@ -1,99 +1,117 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateRecipeDto } from './dto/create-recipe.dto';
-import { UpdateRecipeDto } from './dto/update-recipe.dto';
-import { join } from 'path';
-import { unlink } from 'fs/promises';
 
-type ListParams = {
-  q?: string;
-  tags?: string[];
-  order?: 'recent' | 'title';
-  limit?: number;
-  offset?: number;
-  viewerId?: string | null;
-};
-
-function isLocalUpload(p?: string | null): p is string {
-  return !!p && /^\/uploads\//.test(p);
-}
-async function deleteLocalFile(p?: string | null) {
-  if (!isLocalUpload(p)) return;
-  const full = join(process.cwd(), p.replace(/^\//, ''));
-  try { await unlink(full); } catch {}
-}
+type Viewer = { id?: string } | null;
 
 @Injectable()
 export class RecipesService {
   constructor(private prisma: PrismaService) {}
 
-  async list(params: ListParams = {}) {
-    const { q, tags, order = 'recent', limit = 100, offset = 0, viewerId = null } = params;
+  private sanitize(recipe: any, viewerId?: string, isFavorited: boolean = false) {
+    return {
+      id: recipe.id,
+      title: recipe.title,
+      description: recipe.description ?? null,
+      ingredients: recipe.ingredients ?? [],
+      steps: recipe.steps ?? [],
+      tags: recipe.tags ?? [],
+      imagePath: recipe.imagePath ?? null,
+      sourceUrl: recipe.sourceUrl ?? null,
+      servings: recipe.servings ?? null,
+      prepMinutes: recipe.prepMinutes ?? null,
+      cookMinutes: recipe.cookMinutes ?? null,
+      isPublic: recipe.isPublic ?? true,
+      ownerId: recipe.ownerId,
+      ownerName: recipe.ownerName ?? null,
+      version: recipe.version,
+      createdAt: recipe.createdAt,
+      updatedAt: recipe.updatedAt,
+      isFavorited: Boolean(isFavorited),
+      canEdit: viewerId ? viewerId === recipe.ownerId : false,
+    };
+  }
 
-    const rows = await this.prisma.recipe.findMany({
-      orderBy: order === 'title' ? { title: 'asc' } : { createdAt: 'desc' },
+  async list(viewer: Viewer, q?: string) {
+    const viewerId = viewer?.id;
+
+    const whereSearch =
+      q && q.trim()
+        ? {
+            OR: [
+              { title: { contains: q } },        // keep simple (case-sensitive) to satisfy your Prisma client types
+              { description: { contains: q } },
+            ],
+          }
+        : undefined;
+
+    const all = await this.prisma.recipe.findMany({
+      orderBy: { updatedAt: 'desc' },
+      where: whereSearch,
     });
 
-    // public OR owned by viewer
-    let filtered = rows.filter((r) => r.isPublic || (viewerId && r.ownerId === viewerId));
+    // Only show public recipes or your own
+    const visible = all.filter((r) => r.isPublic || r.ownerId === viewerId);
 
-    if (q && q.trim()) {
-      const needle = q.trim().toLowerCase();
-      filtered = filtered.filter((r) => {
-        const title = (r.title ?? '').toLowerCase();
-        const desc = ((r as any).description ?? '').toLowerCase();
-        return title.includes(needle) || desc.includes(needle);
+    // Compute favorite flags for viewer
+    let favSet = new Set<string>();
+    if (viewerId && visible.length) {
+      const favs = await this.prisma.favorite.findMany({
+        where: { userId: viewerId, recipeId: { in: visible.map((r) => r.id) } },
+        select: { recipeId: true },
       });
+      favSet = new Set(favs.map((f) => f.recipeId));
     }
 
-    if (tags && tags.length) {
-      filtered = filtered.filter((r) => {
-        const arr: string[] = Array.isArray((r as any).tags) ? (r as any).tags : [];
-        const lower = arr.map((x) => x.toLowerCase());
-        return tags.every((t) => lower.includes(t.toLowerCase()));
-      });
-    }
-
-    const start = Math.max(0, Number(offset) || 0);
-    const end = start + (Math.max(1, Math.min(500, Number(limit) || 100)));
-    const page = filtered.slice(start, end);
-
-    return { total: filtered.length, items: page };
+    return {
+      items: visible.map((r) => this.sanitize(r, viewerId, favSet.has(r.id))),
+    };
   }
 
-  async getForViewer(id: string, viewerId: string | null) {
-    const rec = await this.prisma.recipe.findUnique({ where: { id } });
-    if (!rec) throw new NotFoundException('Recipe not found');
-    if (!rec.isPublic && rec.ownerId !== viewerId) {
-      throw new ForbiddenException('You are not allowed to view this recipe');
+  async byId(id: string, viewer: Viewer) {
+    const viewerId = viewer?.id;
+    const r = await this.prisma.recipe.findUnique({ where: { id } });
+    if (!r) throw new NotFoundException('Recipe not found');
+    if (!r.isPublic && r.ownerId !== viewerId) {
+      throw new ForbiddenException('You cannot view this recipe');
     }
-    return rec;
+
+    let isFav = false;
+    if (viewerId) {
+      const fav = await this.prisma.favorite.findUnique({
+        where: { userId_recipeId: { userId: viewerId, recipeId: id } },
+        select: { recipeId: true },
+      });
+      isFav = Boolean(fav);
+    }
+
+    return this.sanitize(r, viewerId, isFav);
   }
 
-  create(dto: CreateRecipeDto, ownerId: string, ownerName: string) {
-    return this.prisma.recipe.create({
+  async create(ownerId: string, ownerName: string, dto: any) {
+    const created = await this.prisma.recipe.create({
       data: {
         title: dto.title,
         description: dto.description ?? null,
         ingredients: dto.ingredients ?? [],
         steps: dto.steps ?? [],
-        tags: (dto.tags ?? []).map((t) => t.trim()).filter(Boolean),
+        tags: dto.tags ?? [],
+        imagePath: dto.imagePath ?? null,
+        sourceUrl: dto.sourceUrl ?? null,
         servings: dto.servings ?? null,
         prepMinutes: dto.prepMinutes ?? null,
         cookMinutes: dto.cookMinutes ?? null,
-        imagePath: dto.imagePath ?? null,
-        sourceUrl: dto.sourceUrl ?? null,
         isPublic: dto.isPublic ?? true,
         ownerId,
         ownerName,
       },
     });
+    return this.sanitize(created, ownerId, false);
   }
 
-  async update(id: string, dto: UpdateRecipeDto, viewerId: string) {
-    const before = await this.prisma.recipe.findUnique({ where: { id } });
-    if (!before) throw new NotFoundException('Recipe not found');
-    if (before.ownerId !== viewerId) throw new ForbiddenException('Not your recipe');
+  async update(id: string, userId: string, dto: any) {
+    const existing = await this.prisma.recipe.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Recipe not found');
+    if (existing.ownerId !== userId) throw new ForbiddenException('Not your recipe');
 
     const updated = await this.prisma.recipe.update({
       where: { id },
@@ -102,29 +120,31 @@ export class RecipesService {
         description: dto.description ?? undefined,
         ingredients: dto.ingredients ?? undefined,
         steps: dto.steps ?? undefined,
-        tags: dto.tags ? dto.tags.map((t) => t.trim()).filter(Boolean) : undefined,
+        tags: dto.tags ?? undefined,
+        imagePath: dto.imagePath ?? undefined,
+        sourceUrl: dto.sourceUrl ?? undefined,
         servings: dto.servings ?? undefined,
         prepMinutes: dto.prepMinutes ?? undefined,
         cookMinutes: dto.cookMinutes ?? undefined,
-        imagePath: dto.imagePath ?? undefined,
-        sourceUrl: dto.sourceUrl ?? undefined,
         isPublic: dto.isPublic ?? undefined,
+        version: { increment: 1 },
       },
     });
 
-    if (dto.imagePath !== undefined && before.imagePath && before.imagePath !== dto.imagePath) {
-      await deleteLocalFile(before.imagePath);
-    }
-    return updated;
+    // keep current favorite status for the updater
+    const fav = await this.prisma.favorite.findUnique({
+      where: { userId_recipeId: { userId, recipeId: id } },
+      select: { recipeId: true },
+    });
+
+    return this.sanitize(updated, userId, Boolean(fav));
   }
 
-  async remove(id: string, viewerId: string) {
-    const rec = await this.prisma.recipe.findUnique({ where: { id } });
-    if (!rec) throw new NotFoundException('Recipe not found');
-    if (rec.ownerId !== viewerId) throw new ForbiddenException('Not your recipe');
-
+  async remove(id: string, userId: string) {
+    const existing = await this.prisma.recipe.findUnique({ where: { id } });
+    if (!existing) throw new NotFoundException('Recipe not found');
+    if (existing.ownerId !== userId) throw new ForbiddenException('Not your recipe');
     await this.prisma.recipe.delete({ where: { id } });
-    await deleteLocalFile(rec.imagePath);
     return { ok: true };
   }
 }

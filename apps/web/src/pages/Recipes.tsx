@@ -11,6 +11,7 @@ type Recipe = {
   ownerId?: string | null;
   ownerName?: string | null;
   isPublic?: boolean;
+  isFavorited?: boolean;
 };
 
 export default function Recipes() {
@@ -38,10 +39,7 @@ export default function Recipes() {
     }
   }
 
-  React.useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  React.useEffect(() => { load(); }, []);
 
   async function remove(id: string) {
     if (!confirm('Delete this recipe?')) return;
@@ -53,23 +51,24 @@ export default function Recipes() {
     await load();
   }
 
+  async function toggleFav(rid: string, cur: boolean | undefined) {
+    if (!user) { nav('/login'); return; }
+    const res = await apiFetch(`/api/recipes/${rid}/favorite`, { method: cur ? 'DELETE' : 'POST' });
+    if (!res.ok) {
+      alert(`${cur ? 'Unfavorite' : 'Favorite'} failed (${res.status})`);
+      return;
+    }
+    setItems((arr) => arr.map((x) => (x.id === rid ? { ...x, isFavorited: !cur } : x)));
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="text-xl font-semibold">Recipes</h2>
         <div className="flex gap-2">
-          <input
-            className="border rounded px-2 py-1"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search…"
-          />
-          <button className="border rounded px-3 py-1" onClick={load}>
-            Search
-          </button>
-          <button className="border rounded px-3 py-1" onClick={() => nav('/recipes/new')}>
-            + New
-          </button>
+          <input className="border rounded px-2 py-1" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search…" />
+          <button className="border rounded px-3 py-1" onClick={load}>Search</button>
+          <button className="border rounded px-3 py-1" onClick={() => nav('/recipes/new')}>+ New</button>
         </div>
       </div>
 
@@ -85,42 +84,31 @@ export default function Recipes() {
             return (
               <li key={r.id} className="border rounded p-3 flex gap-3">
                 {r.imagePath ? (
-                  <img
-                    src={r.imagePath}
-                    alt=""
-                    className="w-24 h-24 object-cover rounded"
-                    onError={(e) => ((e.currentTarget as HTMLImageElement).style.display = 'none')}
-                  />
+                  <img src={r.imagePath} alt="" className="w-24 h-24 object-cover rounded" />
                 ) : (
                   <div className="w-24 h-24 bg-gray-100 rounded flex items-center justify-center text-gray-400">
                     No image
                   </div>
                 )}
                 <div className="flex-1">
-                  <Link to={`/recipes/${r.id}`} className="font-semibold hover:underline">
-                    {r.title}
-                  </Link>
+                  <Link to={`/recipes/${r.id}`} className="font-semibold hover:underline">{r.title}</Link>
                   <div className="text-sm text-gray-500">
                     {r.isPublic ? 'Public' : 'Private'}
                     {r.ownerName ? ` · by ${r.ownerName}` : ''}
                   </div>
-                  {r.description && (
-                    <p className="text-sm text-gray-700 line-clamp-2 mt-1">{r.description}</p>
+                  {r.description && <p className="text-sm text-gray-700 line-clamp-2 mt-1">{r.description}</p>}
+                </div>
+                <div className="flex flex-col gap-2 items-end">
+                  <button className="text-sm underline" onClick={() => toggleFav(r.id, r.isFavorited)}>
+                    {r.isFavorited ? '★ Unfavorite' : '☆ Favorite'}
+                  </button>
+                  {isOwner && (
+                    <>
+                      <button className="text-sm underline" onClick={() => nav(`/recipes/${r.id}/edit`)}>Edit</button>
+                      <button className="text-sm text-red-600 underline" onClick={() => remove(r.id)}>Delete</button>
+                    </>
                   )}
                 </div>
-                {isOwner && (
-                  <div className="flex flex-col gap-2">
-                    <button
-                      className="text-sm underline"
-                      onClick={() => nav(`/recipes/${r.id}/edit`)}
-                    >
-                      Edit
-                    </button>
-                    <button className="text-sm text-red-600 underline" onClick={() => remove(r.id)}>
-                      Delete
-                    </button>
-                  </div>
-                )}
               </li>
             );
           })}
